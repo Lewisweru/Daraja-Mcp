@@ -19,7 +19,12 @@ app.use("/callbacks", callbackRouter);
 function requireBearerToken(req: express.Request, res: express.Response, next: express.NextFunction) {
   if (!config.mcpBearerToken) return next(); // no token configured -> skip (dev only)
   const header = req.header("authorization") ?? "";
-  const provided = header.startsWith("Bearer ") ? header.slice(7) : "";
+  const fromHeader = header.startsWith("Bearer ") ? header.slice(7) : "";
+  // Some MCP clients (e.g. claude.ai's custom connector dialog) only offer a URL field and
+  // OAuth Client ID/Secret — no way to set a raw Authorization header. As a fallback, also
+  // accept the token as a ?token= query param so it can be pasted straight into the URL.
+  const fromQuery = typeof req.query.token === "string" ? req.query.token : "";
+  const provided = fromHeader || fromQuery;
   if (provided !== config.mcpBearerToken) {
     res.status(401).json({
       jsonrpc: "2.0",
