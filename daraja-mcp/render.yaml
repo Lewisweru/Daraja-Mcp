@@ -12,7 +12,7 @@ services:
       sizeGB: 1
     envVars:
       - key: DARAJA_ENV
-        value: sandbox
+        value: production
       - key: DARAJA_CONSUMER_KEY
         sync: false
       - key: DARAJA_CONSUMER_SECRET
@@ -21,6 +21,8 @@ services:
         sync: false
       - key: DARAJA_PASSKEY
         sync: false
+      - key: DARAJA_TILL_NUMBER
+        sync: false
       - key: DARAJA_STK_TRANSACTION_TYPE
         value: CustomerBuyGoodsOnline
       - key: DARAJA_INITIATOR_NAME
@@ -28,7 +30,7 @@ services:
       - key: DARAJA_INITIATOR_PASSWORD
         sync: false
       - key: DARAJA_CERT_PATH
-        value: certs/sandbox.cer
+        value: /etc/secrets/production.cer # uploaded via Render's "Secret Files" tab, not the repo
       - key: CALLBACK_BASE_URL
         sync: false # set to your Render URL, e.g. https://daraja-mcp.onrender.com
       - key: MAX_TRANSACTION_AMOUNT

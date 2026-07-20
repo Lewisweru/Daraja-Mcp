@@ -110,14 +110,18 @@ export function registerTools(server: McpServer) {
 
   server.tool(
     "b2b_payment",
-    "Send money OUT from your business shortcode to another business's paybill/till. Moves real money " +
+    "Send money OUT from your business shortcode to another business's paybill or till. Moves real money " +
       "and cannot be undone by retrying. Only call with confirm:true after explicit user confirmation.",
     {
       receiverShortcode: z.string().describe("Recipient business paybill/till number"),
       amount: z.number().positive(),
-      accountReference: z.string(),
+      accountReference: z.string().describe("Up to 13 characters"),
       remarks: z.string(),
-      commandId: z.enum(["BusinessPayBill", "BusinessBuyGoods"]).optional(),
+      commandId: z
+        .enum(["BusinessPayBill", "BusinessBuyGoods"])
+        .default("BusinessBuyGoods")
+        .describe("BusinessBuyGoods for a till number, BusinessPayBill for a paybill number"),
+      requester: z.string().optional().describe("Consumer's phone number, if paying on their behalf"),
       confirm: z.boolean().describe("Must be true. Only set true after explicit user confirmation."),
     },
     async (input) => {

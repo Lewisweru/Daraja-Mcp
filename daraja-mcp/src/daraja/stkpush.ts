@@ -23,7 +23,7 @@ export async function stkPush(input: StkPushInput) {
     TransactionType: config.stkTransactionType,
     Amount: Math.round(input.amount),
     PartyA: phone,
-    PartyB: config.shortcode,
+    PartyB: config.tillNumber,
     PhoneNumber: phone,
     CallBackURL: callbackUrl("/callbacks/stk"),
     AccountReference: input.accountReference.slice(0, 12),

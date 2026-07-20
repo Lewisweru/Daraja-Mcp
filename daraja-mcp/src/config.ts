@@ -26,9 +26,14 @@ export const config = {
   consumerKey: required("DARAJA_CONSUMER_KEY"),
   consumerSecret: required("DARAJA_CONSUMER_SECRET"),
 
-  // Lipa Na M-Pesa Online (STK Push) — your till/paybill + passkey.
+  // Lipa Na M-Pesa Online (STK Push) — the API/organization shortcode tied to
+  // your passkey. This is what BusinessShortCode + Password are computed from.
   shortcode: required("DARAJA_SHORTCODE"),
   passkey: required("DARAJA_PASSKEY"),
+  // The customer-facing till number money actually lands in (PartyB on a
+  // Buy Goods STK push). Some setups use the same number for both — falls
+  // back to DARAJA_SHORTCODE if not set, e.g. for a plain paybill.
+  tillNumber: optional("DARAJA_TILL_NUMBER", optional("DARAJA_SHORTCODE", "")),
   // "CustomerPayBillOnline" or "CustomerBuyGoodsOnline" — tills use the latter.
   stkTransactionType: optional("DARAJA_STK_TRANSACTION_TYPE", "CustomerBuyGoodsOnline"),
 

@@ -10,8 +10,10 @@ export interface B2bInput {
   amount: number;
   accountReference: string;
   remarks: string;
-  /** "BusinessPayBill" | "BusinessBuyGoods" */
+  /** "BusinessBuyGoods" for a till number, "BusinessPayBill" for a paybill number. */
   commandId?: "BusinessPayBill" | "BusinessBuyGoods";
+  /** Optional: consumer's phone number, if paying this merchant on their behalf. */
+  requester?: string;
   confirm: boolean;
 }
 
@@ -23,14 +25,14 @@ export async function b2bPayment(input: B2bInput) {
   const body = {
     Initiator: config.initiatorName,
     SecurityCredential: getSecurityCredential(),
-    CommandID: input.commandId ?? "BusinessPayBill",
+    CommandID: input.commandId ?? "BusinessBuyGoods",
     SenderIdentifierType: "4",
     RecieverIdentifierType: "4",
     Amount: Math.round(input.amount),
     PartyA: config.shortcode,
     PartyB: input.receiverShortcode,
-    AccountReference: input.accountReference.slice(0, 12),
-    Requester: "",
+    AccountReference: input.accountReference.slice(0, 13),
+    Requester: input.requester ?? "",
     Remarks: input.remarks.slice(0, 100),
     QueueTimeOutURL: callbackUrl("/callbacks/b2b/timeout"),
     ResultURL: callbackUrl("/callbacks/b2b/result"),
