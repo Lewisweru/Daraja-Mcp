@@ -3,6 +3,7 @@ services:
     name: daraja-mcp
     runtime: node
     plan: free # no persistent disk needed now that Firestore holds the data
+    rootDir: daraja-mcp # this render.yaml lives at the repo root, but the Node project is one level down
     buildCommand: npm install && npm run build
     startCommand: npm start
     healthCheckPath: /healthz
