@@ -1,0 +1,41 @@
+services:
+  - type: web
+    name: daraja-mcp
+    runtime: node
+    plan: starter
+    buildCommand: npm install && npm run build
+    startCommand: npm start
+    healthCheckPath: /healthz
+    disk:
+      name: daraja-data
+      mountPath: /var/data
+      sizeGB: 1
+    envVars:
+      - key: DARAJA_ENV
+        value: sandbox
+      - key: DARAJA_CONSUMER_KEY
+        sync: false
+      - key: DARAJA_CONSUMER_SECRET
+        sync: false
+      - key: DARAJA_SHORTCODE
+        sync: false
+      - key: DARAJA_PASSKEY
+        sync: false
+      - key: DARAJA_STK_TRANSACTION_TYPE
+        value: CustomerBuyGoodsOnline
+      - key: DARAJA_INITIATOR_NAME
+        sync: false
+      - key: DARAJA_INITIATOR_PASSWORD
+        sync: false
+      - key: DARAJA_CERT_PATH
+        value: certs/sandbox.cer
+      - key: CALLBACK_BASE_URL
+        sync: false # set to your Render URL, e.g. https://daraja-mcp.onrender.com
+      - key: MAX_TRANSACTION_AMOUNT
+        value: "5000"
+      - key: MAX_DAILY_AMOUNT
+        value: "20000"
+      - key: DB_PATH
+        value: /var/data/daraja.sqlite
+      - key: MCP_BEARER_TOKEN
+        sync: false # generate with `openssl rand -hex 32`
