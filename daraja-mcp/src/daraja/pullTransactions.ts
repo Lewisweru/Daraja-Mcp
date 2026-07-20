@@ -8,11 +8,10 @@ import { darajaClient, callbackUrl, normalizeMsisdn } from "./client.js";
  */
 export async function registerPullTransactions(nominatedNumber: string) {
   const body = {
-    // Pull Transactions must be registered/queried against whichever number
-    // the money actually settles into. Our STK pushes set PartyB to the till
-    // (config.tillNumber), so C2B transactions post there — not the org-level
-    // API shortcode. Falls back to config.shortcode if no separate till is set.
-    ShortCode: config.tillNumber || config.shortcode,
+    // Confirmed via Safaricom's own validation ("Kindly use your own
+    // ShortCode") that Pull Transactions must use the org-level API
+    // shortcode, not the customer-facing till number.
+    ShortCode: config.shortcode,
     RequestType: "Pull",
     NominatedNumber: normalizeMsisdn(nominatedNumber),
     CallBackURL: callbackUrl("/callbacks/pull-transactions/register"),
@@ -37,7 +36,7 @@ export interface PullTransactionsQueryInput {
  */
 export async function pullTransactionsQuery(input: PullTransactionsQueryInput) {
   const body = {
-    ShortCode: config.tillNumber || config.shortcode,
+    ShortCode: config.shortcode,
     StartDate: input.startDate,
     EndDate: input.endDate,
     OffSetValue: String(input.offsetValue ?? 0),
