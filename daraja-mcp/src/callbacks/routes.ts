@@ -11,14 +11,14 @@ function ok(res: import("express").Response) {
 }
 
 // ---- STK Push result ----
-callbackRouter.post("/stk", (req, res) => {
-  logRawCallback("stk", req.body);
+callbackRouter.post("/stk", async (req, res) => {
+  await logRawCallback("stk", req.body);
   const cb = req.body?.Body?.stkCallback;
   if (cb?.CheckoutRequestID) {
     const success = cb.ResultCode === 0;
     const items: Array<{ Name: string; Value: unknown }> = cb.CallbackMetadata?.Item ?? [];
     const metadata = Object.fromEntries(items.map((i) => [i.Name, i.Value]));
-    recordResult(cb.CheckoutRequestID, success ? "success" : "failed", {
+    await recordResult(cb.CheckoutRequestID, success ? "success" : "failed", {
       resultCode: cb.ResultCode,
       resultDesc: cb.ResultDesc,
       ...metadata,
@@ -28,34 +28,34 @@ callbackRouter.post("/stk", (req, res) => {
 });
 
 // ---- C2B validation (must respond synchronously; return non-zero to reject a payment) ----
-callbackRouter.post("/c2b/validation", (req, res) => {
-  logRawCallback("c2b-validation", req.body);
+callbackRouter.post("/c2b/validation", async (req, res) => {
+  await logRawCallback("c2b-validation", req.body);
   // Default: accept everything. Add business rules here if you need to reject
   // payments with a bad/missing BillRefNumber, etc.
   ok(res);
 });
 
 // ---- C2B confirmation (payment already completed, just record it) ----
-callbackRouter.post("/c2b/confirmation", (req, res) => {
-  logRawCallback("c2b-confirmation", req.body);
+callbackRouter.post("/c2b/confirmation", async (req, res) => {
+  await logRawCallback("c2b-confirmation", req.body);
   const body = req.body ?? {};
   if (body.TransID) {
-    recordResult(body.TransID, "success", body);
+    await recordResult(body.TransID, "success", body);
   }
   ok(res);
 });
 
-// ---- Generic Result/Timeout handler for B2C, B2B, TransactionStatus, AccountBalance, Reversal ----
+// ---- Generic Result/Timeout handler for B2C, B2B, TransactionStatus, AccountBalance, Reversal, B2Pochi ----
 function genericResultHandler(route: string) {
-  return (req: import("express").Request, res: import("express").Response) => {
-    logRawCallback(route, req.body);
+  return async (req: import("express").Request, res: import("express").Response) => {
+    await logRawCallback(route, req.body);
     const result = req.body?.Result;
     const ref = result?.ConversationID ?? result?.OriginatorConversationID;
     if (ref) {
       const success = result?.ResultCode === 0;
       const params: Array<{ Key: string; Value: unknown }> = result?.ResultParameters?.ResultParameter ?? [];
       const metadata = Object.fromEntries(params.map((p) => [p.Key, p.Value]));
-      recordResult(ref, success ? "success" : "failed", {
+      await recordResult(ref, success ? "success" : "failed", {
         resultCode: result?.ResultCode,
         resultDesc: result?.ResultDesc,
         transactionId: result?.TransactionID,
@@ -76,22 +76,24 @@ callbackRouter.post("/balance/result", genericResultHandler("balance-result"));
 callbackRouter.post("/balance/timeout", genericResultHandler("balance-timeout"));
 callbackRouter.post("/reversal/result", genericResultHandler("reversal-result"));
 callbackRouter.post("/reversal/timeout", genericResultHandler("reversal-timeout"));
+callbackRouter.post("/b2pochi/result", genericResultHandler("b2pochi-result"));
+callbackRouter.post("/b2pochi/timeout", genericResultHandler("b2pochi-timeout"));
 
 // ---- B2B Express Checkout (USSD Push to Till) result — flat shape, not the Result{} wrapper ----
-callbackRouter.post("/b2b-express/result", (req, res) => {
-  logRawCallback("b2b-express-result", req.body);
+callbackRouter.post("/b2b-express/result", async (req, res) => {
+  await logRawCallback("b2b-express-result", req.body);
   const body = req.body ?? {};
   const requestId = body.requestId;
   if (requestId) {
     const success = String(body.resultCode) === "0" || body.status === "SUCCESS";
-    recordResult(requestId, success ? "success" : "failed", body);
+    await recordResult(requestId, success ? "success" : "failed", body);
   }
   ok(res);
 });
 
 // ---- Pull Transactions registration callback (rarely used in practice — you fetch
 // data yourself via pull_transactions_query — but logged in case Safaricom posts here) ----
-callbackRouter.post("/pull-transactions/register", (req, res) => {
-  logRawCallback("pull-transactions-register", req.body);
+callbackRouter.post("/pull-transactions/register", async (req, res) => {
+  await logRawCallback("pull-transactions-register", req.body);
   ok(res);
 });

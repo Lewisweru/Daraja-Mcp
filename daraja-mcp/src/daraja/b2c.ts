@@ -16,7 +16,7 @@ export interface B2cInput {
 }
 
 export async function b2cPayment(input: B2cInput) {
-  enforceMoneyOutGuardRails({ amount: input.amount, confirm: input.confirm });
+  await enforceMoneyOutGuardRails({ amount: input.amount, confirm: input.confirm });
 
   const id = randomUUID();
   const phone = normalizeMsisdn(input.phone);
@@ -34,11 +34,11 @@ export async function b2cPayment(input: B2cInput) {
     Occasion: (input.occasion ?? "").slice(0, 100),
   };
 
-  insertTransaction({ id, kind: "b2c", amount: body.Amount, party: phone, requestPayload: body });
+  await insertTransaction({ id, kind: "b2c", amount: body.Amount, party: phone, requestPayload: body });
 
   const res = await darajaClient().post(config.paths.b2cPayment, body);
   const conversationId = res.data?.ConversationID;
-  if (conversationId) setDarajaRef(id, conversationId);
+  if (conversationId) await setDarajaRef(id, conversationId);
 
   return { requestId: id, ...res.data };
 }

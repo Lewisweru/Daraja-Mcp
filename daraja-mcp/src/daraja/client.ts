@@ -20,6 +20,27 @@ export function darajaClient(): AxiosInstance {
   return instance;
 }
 
+/**
+ * Axios only gives you the generic HTTP status message by default. Daraja's
+ * actual error detail (e.g. {"errorCode":"500.002.1001","errorMessage":"Duplicate
+ * OriginatorConversationID."} or {"ResponseDescription": "..."}) is in the response
+ * body — surface that instead so failures are actually debuggable.
+ */
+export function extractErrorMessage(err: unknown): string {
+  if (axios.isAxiosError(err)) {
+    const data = err.response?.data;
+    if (data) {
+      const detail =
+        typeof data === "string"
+          ? data
+          : data.errorMessage ?? data.ResponseDescription ?? data.ResultDesc ?? JSON.stringify(data);
+      return `Daraja error (HTTP ${err.response?.status}): ${detail}`;
+    }
+    return err.message;
+  }
+  return err instanceof Error ? err.message : String(err);
+}
+
 export function callbackUrl(path: string): string {
   return `${config.callbackBaseUrl.replace(/\/$/, "")}${path}`;
 }

@@ -7,7 +7,7 @@ import { todaysOutboundTotal } from "../store/db.js";
  * `confirm: true` — this is the "the user explicitly confirmed this in chat"
  * signal; the tool description tells Claude never to set it on its own.
  */
-export function enforceMoneyOutGuardRails(params: { amount: number; confirm: boolean }) {
+export async function enforceMoneyOutGuardRails(params: { amount: number; confirm: boolean }): Promise<void> {
   if (!params.confirm) {
     throw new Error(
       "Refusing to send: `confirm` was not set to true. Only set confirm:true after the user has " +
@@ -23,7 +23,7 @@ export function enforceMoneyOutGuardRails(params: { amount: number; confirm: boo
         `(set via MAX_TRANSACTION_AMOUNT). Raise the env var if this is intentional.`
     );
   }
-  const spentToday = todaysOutboundTotal();
+  const spentToday = await todaysOutboundTotal();
   if (spentToday + params.amount > config.maxDailyAmount) {
     throw new Error(
       `This would bring today's total money-out to ${spentToday + params.amount}, over the daily cap of ` +

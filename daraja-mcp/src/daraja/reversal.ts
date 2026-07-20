@@ -12,7 +12,7 @@ export interface ReversalInput {
 }
 
 export async function reversal(input: ReversalInput) {
-  enforceMoneyOutGuardRails({ amount: input.amount, confirm: input.confirm });
+  await enforceMoneyOutGuardRails({ amount: input.amount, confirm: input.confirm });
 
   const body = {
     Initiator: config.initiatorName,

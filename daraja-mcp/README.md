@@ -4,7 +4,7 @@ An MCP server exposing Safaricom's M-Pesa Daraja API as tools Claude can call fr
 
 One Node/TypeScript service, two route groups:
 - `POST /mcp` — the MCP endpoint Claude connects to (Streamable HTTP, stateless).
-- `POST /callbacks/*` — where Safaricom sends STK/C2B/B2C/B2B results. Written to a local SQLite file.
+- `POST /callbacks/*` — where Safaricom sends async results. Written to Firestore.
 
 ## Tools
 
@@ -15,14 +15,18 @@ One Node/TypeScript service, two route groups:
 | `c2b_register_urls` | One-time: register this service's callback URLs with your shortcode |
 | `c2b_simulate` | Sandbox-only: simulate a customer paying your paybill/till |
 | `b2c_payment` | Send money out to a customer (refund/payout/salary) — **requires `confirm:true`** |
-| `b2b_payment` | Send money out to another business shortcode — **requires `confirm:true`** |
+| `b2pochi_payment` | Send money out to a Pochi la Biashara wallet by phone number — **requires `confirm:true`** |
+| `b2b_payment` | Send money out to another business's paybill/till — **requires `confirm:true`** |
+| `b2b_express_checkout` | Request payment IN from another till via USSD push (they approve on their end) |
+| `pull_transactions_register` | One-time: register for the Pull Transactions reconciliation API |
+| `pull_transactions_query` | List C2B transactions received in a date range (last 48h only) |
 | `transaction_status` | Look up any past transaction by ID |
 | `account_balance` | Check your shortcode's balance |
 | `reversal` | Reverse a completed transaction — **requires `confirm:true`** |
 | `check_transaction_result` | Read back the stored callback result for a transaction |
 | `list_recent_transactions` | List recent transactions initiated through this server |
 
-`b2c_payment`, `b2b_payment`, and `reversal` also enforce `MAX_TRANSACTION_AMOUNT` and `MAX_DAILY_AMOUNT` server-side, and reject the call outright if `confirm` isn't `true` — so Claude can't fire these off without you explicitly confirming amount + recipient in the conversation first.
+`b2c_payment`, `b2pochi_payment`, `b2b_payment`, and `reversal` also enforce `MAX_TRANSACTION_AMOUNT` and `MAX_DAILY_AMOUNT` server-side, and reject the call outright if `confirm` isn't `true` — so Claude can't fire these off without you explicitly confirming amount + recipient in the conversation first.
 
 ## Local setup
 
@@ -42,17 +46,30 @@ These all require a `SecurityCredential` — your initiator password RSA-encrypt
 
 (or point `DARAJA_CERT_PATH` at wherever you put it). `DARAJA_INITIATOR_PASSWORD` is the plaintext password for your initiator/API operator — it gets encrypted at request time, never sent or stored in plaintext.
 
+### Getting the Firebase service account key
+
+The store is Firestore, via `firebase-admin`. That needs a **service account key**, not the client-side web config (`apiKey`/`authDomain`/etc. from `firebase/app`) — that config is for browser apps and won't authenticate a server. To get the right one:
+
+1. Firebase console → your project → gear icon → Project Settings → **Service Accounts** tab.
+2. Click "Generate new private key" → downloads a JSON file.
+3. Save it locally at `certs/firebase-service-account.json` (already gitignored).
+4. Make sure Firestore itself is enabled for the project (console → Build → Firestore Database → Create database, if you haven't already — Native mode, any region).
+
 ## Deploying to Render
 
 This repo includes `render.yaml` (Render "Blueprint"):
 
 1. Push this repo to GitHub.
-2. In Render: New → Blueprint → point at the repo. It reads `render.yaml` and creates the web service with a 1GB persistent disk mounted at `/var/data` (so the SQLite file and any cert you upload survive deploys).
-3. Fill in the env vars marked `sync: false` in the Render dashboard: `DARAJA_CONSUMER_KEY`, `DARAJA_CONSUMER_SECRET`, `DARAJA_SHORTCODE`, `DARAJA_PASSKEY`, `DARAJA_INITIATOR_NAME`, `DARAJA_INITIATOR_PASSWORD`.
-4. After the first deploy, copy the Render URL (e.g. `https://daraja-mcp.onrender.com`) into `CALLBACK_BASE_URL` and redeploy — callback URLs are built from this at request time, so it must be set before you use anything that receives a callback.
-5. Upload your `.cer` file — since the repo `.gitignore`s certs, either commit it via a private path, use a Render Secret File, or `curl` it onto the disk once via a one-off shell (Render dashboard → Shell).
+2. In Render: New → Blueprint → point at the repo. It reads `render.yaml` and creates the web service — no persistent disk needed since Firestore holds the data.
+3. Fill in the env vars marked `sync: false` in the Render dashboard: `DARAJA_CONSUMER_KEY`, `DARAJA_CONSUMER_SECRET`, `DARAJA_SHORTCODE`, `DARAJA_TILL_NUMBER`, `DARAJA_PASSKEY`, `DARAJA_INITIATOR_NAME`, `DARAJA_INITIATOR_PASSWORD`, `MCP_BEARER_TOKEN`.
+4. Upload two Secret Files (Render dashboard → Environment → Secret Files): the Daraja cert as `production.cer`, and the Firebase key as `firebase-service-account.json`. `render.yaml` already points `DARAJA_CERT_PATH`/`FIREBASE_SERVICE_ACCOUNT_PATH` at `/etc/secrets/...`, which is where Render mounts them.
+5. After the first deploy, copy the Render URL (e.g. `https://daraja-mcp.onrender.com`) into `CALLBACK_BASE_URL` and redeploy — callback URLs are built from this at request time, so it must be set before you use anything that receives a callback.
 6. Call `c2b_register_urls` once (from Claude, or `curl`) to register validation/confirmation URLs with your shortcode.
-7. Switch `DARAJA_ENV` to `production` and swap the env vars to your production keys once you're ready to go live — you'll also need to submit this server's outbound IP to Safaricom for whitelisting (ask Render support for your service's static outbound IP, or add a static-IP add-on).
+7. You'll also need to submit this server's outbound IP to Safaricom for whitelisting (ask Render support for your service's static outbound IP, or add a static-IP add-on) before B2C/B2B/B2Pochi/Reversal will work in production.
+
+### Keeping the free tier awake
+
+`plan: free` on Render sleeps the service after ~15 min idle and takes 30-50s to wake — risky for Safaricom's callback timeout window. Point an external pinger (UptimeRobot or similar) at `https://<your-render-url>/healthz` every 5-10 min to keep it warm. If you'd rather not depend on that, switch `plan: free` to `plan: starter` in `render.yaml` (~$7/mo, no sleeping).
 
 ## Connecting Claude to it
 

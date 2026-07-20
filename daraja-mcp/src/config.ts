@@ -57,6 +57,7 @@ export const config = {
     c2bRegister: optional("DARAJA_PATH_C2B_REGISTER", "/mpesa/c2b/v1/registerurl"),
     c2bSimulate: optional("DARAJA_PATH_C2B_SIMULATE", "/mpesa/c2b/v1/simulate"),
     b2cPayment: optional("DARAJA_PATH_B2C", "/mpesa/b2c/v1/paymentrequest"),
+    b2pochi: optional("DARAJA_PATH_B2POCHI", "/mpesa/b2pochi/v1/paymentrequest"),
     b2bPayment: optional("DARAJA_PATH_B2B", "/mpesa/b2b/v1/paymentrequest"),
     transactionStatus: optional("DARAJA_PATH_TXN_STATUS", "/mpesa/transactionstatus/v1/query"),
     accountBalance: optional("DARAJA_PATH_BALANCE", "/mpesa/accountbalance/v1/query"),
@@ -73,7 +74,13 @@ export const config = {
   maxDailyAmount: Number(optional("MAX_DAILY_AMOUNT", "20000")),
 
   port: Number(optional("PORT", "3000")),
-  dbPath: optional("DB_PATH", "data/daraja.sqlite"),
+  // Path to the Firebase service account JSON key (Firestore is the
+  // transaction/callback store). Upload as a Render Secret File, same as the
+  // Daraja cert.
+  firebaseServiceAccountPath: optional(
+    "FIREBASE_SERVICE_ACCOUNT_PATH",
+    "certs/firebase-service-account.json"
+  ),
 
   // If set, POST /mcp requires `Authorization: Bearer <token>`. Strongly
   // recommended once this is deployed publicly, since these tools move money.

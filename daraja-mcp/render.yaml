@@ -2,14 +2,10 @@ services:
   - type: web
     name: daraja-mcp
     runtime: node
-    plan: starter
+    plan: free # no persistent disk needed now that Firestore holds the data
     buildCommand: npm install && npm run build
     startCommand: npm start
     healthCheckPath: /healthz
-    disk:
-      name: daraja-data
-      mountPath: /var/data
-      sizeGB: 1
     envVars:
       - key: DARAJA_ENV
         value: production
@@ -37,7 +33,7 @@ services:
         value: "5000"
       - key: MAX_DAILY_AMOUNT
         value: "20000"
-      - key: DB_PATH
-        value: /var/data/daraja.sqlite
+      - key: FIREBASE_SERVICE_ACCOUNT_PATH
+        value: /etc/secrets/firebase-service-account.json # uploaded via Render's "Secret Files" tab
       - key: MCP_BEARER_TOKEN
         sync: false # generate with `openssl rand -hex 32`

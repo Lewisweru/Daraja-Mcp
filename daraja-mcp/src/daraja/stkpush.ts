@@ -30,11 +30,11 @@ export async function stkPush(input: StkPushInput) {
     TransactionDesc: input.transactionDesc.slice(0, 13),
   };
 
-  insertTransaction({ id, kind: "stk", amount: body.Amount, party: phone, requestPayload: body });
+  await insertTransaction({ id, kind: "stk", amount: body.Amount, party: phone, requestPayload: body });
 
   const res = await darajaClient().post(config.paths.stkPush, body);
   const checkoutRequestId = res.data?.CheckoutRequestID;
-  if (checkoutRequestId) setDarajaRef(id, checkoutRequestId);
+  if (checkoutRequestId) await setDarajaRef(id, checkoutRequestId);
 
   return { requestId: id, ...res.data };
 }

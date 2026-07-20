@@ -35,7 +35,7 @@ export async function b2bExpressCheckout(input: B2bExpressCheckoutInput) {
     RequestRefID: requestId,
   };
 
-  insertTransaction({
+  await insertTransaction({
     id: requestId,
     kind: "b2b_express",
     darajaRef: requestId,

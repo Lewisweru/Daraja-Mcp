@@ -18,7 +18,7 @@ export interface B2bInput {
 }
 
 export async function b2bPayment(input: B2bInput) {
-  enforceMoneyOutGuardRails({ amount: input.amount, confirm: input.confirm });
+  await enforceMoneyOutGuardRails({ amount: input.amount, confirm: input.confirm });
 
   const id = randomUUID();
 
@@ -38,7 +38,7 @@ export async function b2bPayment(input: B2bInput) {
     ResultURL: callbackUrl("/callbacks/b2b/result"),
   };
 
-  insertTransaction({
+  await insertTransaction({
     id,
     kind: "b2b",
     amount: body.Amount,
@@ -48,7 +48,7 @@ export async function b2bPayment(input: B2bInput) {
 
   const res = await darajaClient().post(config.paths.b2bPayment, body);
   const conversationId = res.data?.ConversationID;
-  if (conversationId) setDarajaRef(id, conversationId);
+  if (conversationId) await setDarajaRef(id, conversationId);
 
   return { requestId: id, ...res.data };
 }

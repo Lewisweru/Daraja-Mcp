@@ -9,6 +9,9 @@ import { registerPullTransactions, pullTransactionsQuery } from "../daraja/pullT
 import { transactionStatus } from "../daraja/transactionStatus.js";
 import { accountBalance } from "../daraja/accountBalance.js";
 import { reversal } from "../daraja/reversal.js";
+import { b2Pochi } from "../daraja/b2pochi.js";
+
+import { extractErrorMessage } from "../daraja/client.js";
 import { getTransaction, listRecentTransactions } from "../store/db.js";
 
 function text(data: unknown) {
@@ -16,8 +19,7 @@ function text(data: unknown) {
 }
 
 function errorText(err: unknown) {
-  const message = err instanceof Error ? err.message : String(err);
-  return { content: [{ type: "text" as const, text: `Error: ${message}` }], isError: true };
+  return { content: [{ type: "text" as const, text: `Error: ${extractErrorMessage(err)}` }], isError: true };
 }
 
 export function registerTools(server: McpServer) {
@@ -104,6 +106,28 @@ export function registerTools(server: McpServer) {
     async (input) => {
       try {
         return text(await b2cPayment(input));
+      } catch (err) {
+        return errorText(err);
+      }
+    }
+  );
+
+  server.tool(
+    "b2pochi_payment",
+    "Send money OUT to a Pochi la Biashara (micro-SME) business wallet by phone number. Distinct from " +
+      "b2c_payment/b2b_payment — dedicated Pochi product, min Ksh 10 per transaction, no API reversal " +
+      "support (undo via the M-Pesa portal only). Moves real money and cannot be undone by retrying. Only " +
+      "call with confirm:true after explicit user confirmation of amount + recipient.",
+    {
+      phone: z.string().describe("The Pochi la Biashara wallet's phone number"),
+      amount: z.number().positive().describe("Amount in KES, minimum 10"),
+      remarks: z.string().describe("Reason for the payment"),
+      occasion: z.string().optional(),
+      confirm: z.boolean().describe("Must be true. Only set true after explicit user confirmation."),
+    },
+    async (input) => {
+      try {
+        return text(await b2Pochi(input));
       } catch (err) {
         return errorText(err);
       }
@@ -250,7 +274,7 @@ export function registerTools(server: McpServer) {
       "returned at the time. Callback results can take a few seconds to a couple minutes to arrive.",
     { id: z.string().describe("requestId or Daraja reference returned by the original tool call") },
     async ({ id }) => {
-      const row = getTransaction(id);
+      const row = await getTransaction(id);
       if (!row) {
         return text({ found: false, message: "No transaction found with that id yet." });
       }
@@ -272,12 +296,22 @@ export function registerTools(server: McpServer) {
     "List recent transactions initiated through this MCP, optionally filtered by kind.",
     {
       kind: z
-        .enum(["stk", "b2c", "b2b", "b2b_express", "reversal", "transaction_status", "account_balance", "c2b"])
+        .enum([
+          "stk",
+          "b2c",
+          "b2pochi",
+          "b2b",
+          "b2b_express",
+          "reversal",
+          "transaction_status",
+          "account_balance",
+          "c2b",
+        ])
         .optional(),
       limit: z.number().int().positive().max(100).default(20),
     },
     async ({ kind, limit }) => {
-      const rows = listRecentTransactions(kind, limit);
+      const rows = await listRecentTransactions(kind, limit);
       return text(
         rows.map((r) => ({
           id: r.id,

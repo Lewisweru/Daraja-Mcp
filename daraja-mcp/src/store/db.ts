@@ -1,36 +1,19 @@
-import { mkdirSync } from "node:fs";
-import { dirname } from "node:path";
-import Database from "better-sqlite3";
+import { readFileSync } from "node:fs";
+import { cert, getApps, initializeApp } from "firebase-admin/app";
+import { getFirestore, type Query } from "firebase-admin/firestore";
 import { config } from "../config.js";
 
-mkdirSync(dirname(config.dbPath), { recursive: true });
-const db = new Database(config.dbPath);
-db.pragma("journal_mode = WAL");
+if (!getApps().length) {
+  const serviceAccount = JSON.parse(readFileSync(config.firebaseServiceAccountPath, "utf8"));
+  initializeApp({ credential: cert(serviceAccount) });
+}
 
-db.exec(`
-  CREATE TABLE IF NOT EXISTS transactions (
-    id TEXT PRIMARY KEY,             -- our own request id (idempotency key)
-    kind TEXT NOT NULL,              -- 'stk' | 'b2c' | 'b2b' | 'reversal' | 'transaction_status' | 'account_balance' | 'c2b'
-    daraja_ref TEXT,                 -- CheckoutRequestID / ConversationID / OriginatorConversationID
-    amount REAL,
-    party TEXT,                      -- phone number / shortcode this concerns
-    status TEXT NOT NULL DEFAULT 'pending', -- 'pending' | 'success' | 'failed'
-    request_payload TEXT,
-    result_payload TEXT,
-    created_at TEXT NOT NULL DEFAULT (datetime('now')),
-    updated_at TEXT NOT NULL DEFAULT (datetime('now'))
-  );
+const db = getFirestore();
+const transactionsCol = db.collection("transactions");
+const rawCallbacksCol = db.collection("raw_callbacks");
 
-  CREATE INDEX IF NOT EXISTS idx_transactions_daraja_ref ON transactions(daraja_ref);
-  CREATE INDEX IF NOT EXISTS idx_transactions_kind_created ON transactions(kind, created_at);
-
-  CREATE TABLE IF NOT EXISTS raw_callbacks (
-    id INTEGER PRIMARY KEY AUTOINCREMENT,
-    route TEXT NOT NULL,
-    body TEXT NOT NULL,
-    received_at TEXT NOT NULL DEFAULT (datetime('now'))
-  );
-`);
+/** Kinds that move money OUT of your account — counted toward the daily cap. */
+const MONEY_OUT_KINDS = ["b2c", "b2b", "b2pochi"];
 
 export interface TransactionRow {
   id: string;
@@ -45,77 +28,95 @@ export interface TransactionRow {
   updated_at: string;
 }
 
-export function insertTransaction(row: {
+export async function insertTransaction(row: {
   id: string;
   kind: string;
   darajaRef?: string;
   amount?: number;
   party?: string;
   requestPayload: unknown;
-}) {
-  db.prepare(
-    `INSERT INTO transactions (id, kind, daraja_ref, amount, party, request_payload)
-     VALUES (@id, @kind, @darajaRef, @amount, @party, @requestPayload)`
-  ).run({
+}): Promise<void> {
+  const now = new Date().toISOString();
+  const doc: TransactionRow = {
     id: row.id,
     kind: row.kind,
-    darajaRef: row.darajaRef ?? null,
+    daraja_ref: row.darajaRef ?? null,
     amount: row.amount ?? null,
     party: row.party ?? null,
-    requestPayload: JSON.stringify(row.requestPayload),
-  });
+    status: "pending",
+    request_payload: JSON.stringify(row.requestPayload),
+    result_payload: null,
+    created_at: now,
+    updated_at: now,
+  };
+  await transactionsCol.doc(row.id).set(doc);
 }
 
-export function setDarajaRef(id: string, darajaRef: string) {
-  db.prepare(`UPDATE transactions SET daraja_ref = ?, updated_at = datetime('now') WHERE id = ?`).run(
-    darajaRef,
-    id
+export async function setDarajaRef(id: string, darajaRef: string): Promise<void> {
+  await transactionsCol.doc(id).set(
+    { daraja_ref: darajaRef, updated_at: new Date().toISOString() },
+    { merge: true }
   );
 }
 
-export function recordResult(
+export async function recordResult(
   darajaRef: string,
   status: "success" | "failed",
   resultPayload: unknown
-) {
-  db.prepare(
-    `UPDATE transactions
-     SET status = ?, result_payload = ?, updated_at = datetime('now')
-     WHERE daraja_ref = ?`
-  ).run(status, JSON.stringify(resultPayload), darajaRef);
+): Promise<void> {
+  // Try direct doc lookup first (covers b2b_express/b2pochi, which use their own
+  // generated id as the initial ref), then fall back to querying by daraja_ref.
+  const byId = await transactionsCol.doc(darajaRef).get();
+  const target = byId.exists
+    ? byId.ref
+    : (await transactionsCol.where("daraja_ref", "==", darajaRef).limit(1).get()).docs[0]?.ref;
+  if (!target) return;
+  await target.set(
+    { status, result_payload: JSON.stringify(resultPayload), updated_at: new Date().toISOString() },
+    { merge: true }
+  );
 }
 
-export function getTransaction(id: string): TransactionRow | undefined {
-  return db.prepare(`SELECT * FROM transactions WHERE id = ? OR daraja_ref = ?`).get(id, id) as
-    | TransactionRow
-    | undefined;
+export async function getTransaction(id: string): Promise<TransactionRow | undefined> {
+  const byId = await transactionsCol.doc(id).get();
+  if (byId.exists) return byId.data() as TransactionRow;
+  const byRef = await transactionsCol.where("daraja_ref", "==", id).limit(1).get();
+  if (!byRef.empty) return byRef.docs[0].data() as TransactionRow;
+  return undefined;
 }
 
-export function listRecentTransactions(kind: string | undefined, limit: number): TransactionRow[] {
+/**
+ * Filters/sorts in-memory rather than with Firestore where()+orderBy() on
+ * different fields, deliberately — that combination needs a manual composite
+ * index in Firestore, which would make the first real call fail. At this
+ * project's scale (a single till's transaction volume) this is plenty fast.
+ */
+export async function listRecentTransactions(kind: string | undefined, limit: number): Promise<TransactionRow[]> {
   if (kind) {
-    return db
-      .prepare(`SELECT * FROM transactions WHERE kind = ? ORDER BY created_at DESC LIMIT ?`)
-      .all(kind, limit) as TransactionRow[];
+    const snap = await transactionsCol.where("kind", "==", kind).limit(500).get();
+    const rows = snap.docs.map((d) => d.data() as TransactionRow);
+    rows.sort((a, b) => (a.created_at < b.created_at ? 1 : a.created_at > b.created_at ? -1 : 0));
+    return rows.slice(0, limit);
   }
-  return db.prepare(`SELECT * FROM transactions ORDER BY created_at DESC LIMIT ?`).all(limit) as TransactionRow[];
+  const q: Query = transactionsCol.orderBy("created_at", "desc").limit(limit);
+  const snap = await q.get();
+  return snap.docs.map((d) => d.data() as TransactionRow);
 }
 
-/** Sum of successful+pending money-out (b2c/b2b) amounts today — used for the daily cap guard rail. */
-export function todaysOutboundTotal(): number {
-  const row = db
-    .prepare(
-      `SELECT COALESCE(SUM(amount), 0) as total
-       FROM transactions
-       WHERE kind IN ('b2c', 'b2b')
-         AND status != 'failed'
-         AND date(created_at) = date('now')`
-    )
-    .get() as { total: number };
-  return row.total;
+/** Sum of successful+pending money-out (b2c/b2b/b2pochi) amounts today — used for the daily cap guard rail. */
+export async function todaysOutboundTotal(): Promise<number> {
+  const startOfDayIso = new Date(new Date().toDateString()).toISOString();
+  const snap = await transactionsCol.where("kind", "in", MONEY_OUT_KINDS).get();
+  let total = 0;
+  for (const doc of snap.docs) {
+    const data = doc.data() as TransactionRow;
+    if (data.status !== "failed" && data.created_at >= startOfDayIso) {
+      total += data.amount ?? 0;
+    }
+  }
+  return total;
 }
 
-export function logRawCallback(route: string, body: unknown) {
-  db.prepare(`INSERT INTO raw_callbacks (route, body) VALUES (?, ?)`).run(route, JSON.stringify(body));
+export async function logRawCallback(route: string, body: unknown): Promise<void> {
+  await rawCallbacksCol.add({ route, body: JSON.stringify(body), received_at: new Date().toISOString() });
 }
-
-export default db;
