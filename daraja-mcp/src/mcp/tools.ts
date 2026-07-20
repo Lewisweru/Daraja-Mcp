@@ -4,6 +4,8 @@ import { stkPush, stkPushQuery } from "../daraja/stkpush.js";
 import { c2bRegisterUrls, c2bSimulate } from "../daraja/c2b.js";
 import { b2cPayment } from "../daraja/b2c.js";
 import { b2bPayment } from "../daraja/b2b.js";
+import { b2bExpressCheckout } from "../daraja/b2bExpressCheckout.js";
+import { registerPullTransactions, pullTransactionsQuery } from "../daraja/pullTransactions.js";
 import { transactionStatus } from "../daraja/transactionStatus.js";
 import { accountBalance } from "../daraja/accountBalance.js";
 import { reversal } from "../daraja/reversal.js";
@@ -134,6 +136,68 @@ export function registerTools(server: McpServer) {
   );
 
   server.tool(
+    "b2b_express_checkout",
+    "Request a payment INTO your paybill from another business's till (USSD Push to Till) — sends the " +
+      "other till a USSD prompt asking their operator to enter their Operator ID + PIN to approve. This " +
+      "collects money, it does not send money out, so no confirm flag is needed — the other merchant has " +
+      "to approve it on their end regardless. Results arrive asynchronously.",
+    {
+      primaryShortCode: z.string().describe("The OTHER merchant's till number being asked to pay (debited)"),
+      amount: z.number().positive().describe("Amount in KES"),
+      paymentRef: z.string().describe("Reference shown to the merchant, e.g. an invoice/account number"),
+      partnerName: z.string().describe("Your business's friendly name, shown to the merchant"),
+      receiverShortCode: z
+        .string()
+        .optional()
+        .describe("Your paybill being credited; defaults to your configured shortcode"),
+    },
+    async (input) => {
+      try {
+        return text(await b2bExpressCheckout(input));
+      } catch (err) {
+        return errorText(err);
+      }
+    }
+  );
+
+  server.tool(
+    "pull_transactions_register",
+    "One-time setup: registers your shortcode with Daraja's Pull Transactions reconciliation API. Must " +
+      "be done once before pull_transactions_query will return any data.",
+    {
+      nominatedNumber: z
+        .string()
+        .describe("The Safaricom MSISDN tied to your organization account (from the M-Pesa portal KYC details)"),
+    },
+    async ({ nominatedNumber }) => {
+      try {
+        return text(await registerPullTransactions(nominatedNumber));
+      } catch (err) {
+        return errorText(err);
+      }
+    }
+  );
+
+  server.tool(
+    "pull_transactions_query",
+    "List C2B transactions (Paybill/Buy Goods/STK Push payments received) on your shortcode for a date " +
+      "range. Only covers the last 48 hours, and only money received — not b2c_payment/b2b_payment sends. " +
+      "Requires pull_transactions_register to have been run once already.",
+    {
+      startDate: z.string().describe('Format: "YYYY-MM-DD HH:mm:ss"'),
+      endDate: z.string().describe('Format: "YYYY-MM-DD HH:mm:ss"'),
+      offsetValue: z.number().int().nonnegative().default(0).describe("Pagination offset, starting at 0"),
+    },
+    async (input) => {
+      try {
+        return text(await pullTransactionsQuery(input));
+      } catch (err) {
+        return errorText(err);
+      }
+    }
+  );
+
+  server.tool(
     "transaction_status",
     "Look up the status of any past M-Pesa transaction by its transaction ID (the M-Pesa receipt number).",
     { transactionId: z.string(), remarks: z.string().optional() },
@@ -207,7 +271,9 @@ export function registerTools(server: McpServer) {
     "list_recent_transactions",
     "List recent transactions initiated through this MCP, optionally filtered by kind.",
     {
-      kind: z.enum(["stk", "b2c", "b2b", "reversal", "transaction_status", "account_balance", "c2b"]).optional(),
+      kind: z
+        .enum(["stk", "b2c", "b2b", "b2b_express", "reversal", "transaction_status", "account_balance", "c2b"])
+        .optional(),
       limit: z.number().int().positive().max(100).default(20),
     },
     async ({ kind, limit }) => {

@@ -76,3 +76,22 @@ callbackRouter.post("/balance/result", genericResultHandler("balance-result"));
 callbackRouter.post("/balance/timeout", genericResultHandler("balance-timeout"));
 callbackRouter.post("/reversal/result", genericResultHandler("reversal-result"));
 callbackRouter.post("/reversal/timeout", genericResultHandler("reversal-timeout"));
+
+// ---- B2B Express Checkout (USSD Push to Till) result — flat shape, not the Result{} wrapper ----
+callbackRouter.post("/b2b-express/result", (req, res) => {
+  logRawCallback("b2b-express-result", req.body);
+  const body = req.body ?? {};
+  const requestId = body.requestId;
+  if (requestId) {
+    const success = String(body.resultCode) === "0" || body.status === "SUCCESS";
+    recordResult(requestId, success ? "success" : "failed", body);
+  }
+  ok(res);
+});
+
+// ---- Pull Transactions registration callback (rarely used in practice — you fetch
+// data yourself via pull_transactions_query — but logged in case Safaricom posts here) ----
+callbackRouter.post("/pull-transactions/register", (req, res) => {
+  logRawCallback("pull-transactions-register", req.body);
+  ok(res);
+});

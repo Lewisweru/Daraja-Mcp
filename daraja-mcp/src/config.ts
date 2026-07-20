@@ -61,6 +61,11 @@ export const config = {
     transactionStatus: optional("DARAJA_PATH_TXN_STATUS", "/mpesa/transactionstatus/v1/query"),
     accountBalance: optional("DARAJA_PATH_BALANCE", "/mpesa/accountbalance/v1/query"),
     reversal: optional("DARAJA_PATH_REVERSAL", "/mpesa/reversal/v1/request"),
+    // B2B Express Checkout (USSD Push to Till) — yes, "get-msisdn" is really
+    // the initiate-push path per Safaricom's docs, despite the odd name.
+    b2bExpressCheckout: optional("DARAJA_PATH_B2B_EXPRESS", "/v1/ussdpush/get-msisdn"),
+    pullTransactionsRegister: optional("DARAJA_PATH_PULL_REGISTER", "/pulltransactions/v1/register"),
+    pullTransactionsQuery: optional("DARAJA_PATH_PULL_QUERY", "/pulltransactions/v1/query"),
   },
 
   // --- Safety guard rails for money-OUT tools (b2c, b2b, reversal) ---
