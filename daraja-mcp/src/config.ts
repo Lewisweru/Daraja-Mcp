@@ -54,7 +54,7 @@ export const config = {
     oauth: optional("DARAJA_PATH_OAUTH", "/oauth/v1/generate?grant_type=client_credentials"),
     stkPush: optional("DARAJA_PATH_STK_PUSH", "/mpesa/stkpush/v1/processrequest"),
     stkPushQuery: optional("DARAJA_PATH_STK_QUERY", "/mpesa/stkpushquery/v1/query"),
-    c2bRegister: optional("DARAJA_PATH_C2B_REGISTER", "/mpesa/c2b/v1/registerurl"),
+    c2bRegister: optional("DARAJA_PATH_C2B_REGISTER", "/mpesa/c2b/v2/registerurl"),
     c2bSimulate: optional("DARAJA_PATH_C2B_SIMULATE", "/mpesa/c2b/v1/simulate"),
     b2cPayment: optional("DARAJA_PATH_B2C", "/mpesa/b2c/v1/paymentrequest"),
     b2pochi: optional("DARAJA_PATH_B2POCHI", "/mpesa/b2pochi/v1/paymentrequest"),
